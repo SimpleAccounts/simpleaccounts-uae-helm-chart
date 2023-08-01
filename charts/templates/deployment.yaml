@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simpleaccounts.fullname" . }}
+  labels:
+    {{- include "simpleaccounts.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "simpleaccounts.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "simpleaccounts.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "simpleaccounts.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}-frontend
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository.frontend }}:{{ .Values.image.tag.frontend | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 30
+            successThreshold: 1
+            failureThreshold: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 30
+            successThreshold: 1
+            failureThreshold: 10
+          env:
+            - name: SIMPLEVAT_RELEASE
+              value: {{ .Values.image.tag.frontend | quote }}
+            - name: SIMPLEVAT_HOST
+              value: {{ .Values.backendURL | quote }}
+            {{- range .Values.envFrontend }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resourcesFrontend | nindent 12 }}
+        - name: {{ .Chart.Name }}-backend
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository.backend }}:{{ .Values.image.tag.backend | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /rest/company/getHealthCheck
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 30
+            successThreshold: 1
+            failureThreshold: 10
+          readinessProbe:
+            httpGet:
+              path: /rest/company/getHealthCheck
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 30
+            successThreshold: 1
+            failureThreshold: 10
+          env:
+            - name: SIMPLEVAT_RELEASE
+              value: {{ .Values.image.tag.backend | quote }}
+            - name: SIMPLEVAT_HOST
+              value: {{ .Values.backendURL | quote }}
+            - name: SIMPLEVAT_DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials-{{ include "simpleaccounts.fullname" . }}
+                  key: dbhost
+            - name: SIMPLEVAT_DB
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials-{{ include "simpleaccounts.fullname" . }}
+                  key: database
+            - name: SIMPLEVAT_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials-{{ include "simpleaccounts.fullname" . }}
+                  key: username
+            - name: SIMPLEVAT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials-{{ include "simpleaccounts.fullname" . }}
+                  key: password
+            {{- range .Values.envBackend }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resourcesBackend | nindent 12 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
